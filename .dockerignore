@@ -1,0 +1,14 @@
+.*
+!.env.example
+!.npmrc
+*.md
+*.log
+auth.json
+boost.json
+database/*.sqlite*
+node_modules/
+public/build/
+public/hot
+storage/
+tests/
+vendor/

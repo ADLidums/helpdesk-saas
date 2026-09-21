@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    volumes:
+      - app_storage:/var/www/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - helpdesk
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nginx
+    ports:
+      - "8000:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - helpdesk
+
+  db:
+    image: mariadb:11
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    environment:
+      MYSQL_DATABASE: helpdesk
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - helpdesk
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - helpdesk
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    command: php artisan queue:work
+    restart: unless-stopped
+    volumes:
+      - app_storage:/var/www/storage
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - helpdesk
+
+networks:
+  helpdesk:
+
+volumes:
+  dbdata:
+  app_storage:
