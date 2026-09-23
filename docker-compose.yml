@@ -48,6 +48,7 @@ services:
       - "3306:3306"
     volumes:
       - dbdata:/var/lib/mysql
+      - ./docker/create-testing-database.sql:/docker-entrypoint-initdb.d/create-testing-database.sql:ro
     networks:
       - helpdesk
 
