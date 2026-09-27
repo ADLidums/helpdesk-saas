@@ -2,9 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\ResolveTenant;
 use App\Models\Tenant;
+use App\TenantContext;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Route;
+use LogicException;
 use PHPUnit\Framework\Attributes\TestWith;
+use RuntimeException;
 use Tests\TestCase;
 
 class TenantResolutionTest extends TestCase
@@ -53,5 +59,58 @@ class TenantResolutionTest extends TestCase
 
         $response->assertOk();
         $response->assertViewIs('welcome');
+    }
+
+    public function test_tenant_context_is_cleared_after_a_request(): void
+    {
+        Tenant::factory()->create([
+            'name' => 'Potato',
+            'slug' => 'potato',
+        ]);
+
+        $context = $this->app->make(TenantContext::class);
+
+        $response = $this->get('http://potato.localhost/');
+
+        $response->assertOk();
+
+        $this->expectException(LogicException::class);
+
+        $context->get();
+    }
+
+    public function test_tenant_context_is_cleared_when_a_route_throws(): void
+    {
+        Tenant::factory()->create([
+            'name' => 'Potato',
+            'slug' => 'potato',
+        ]);
+
+        $context = $this->app->make(TenantContext::class);
+
+        Route::domain('{tenantSlug}.localhost')
+            ->middleware(ResolveTenant::class)
+            ->get('/test-failure', function (
+                TenantContext $tenantContext,
+                string $tenantSlug,
+            ): never {
+                throw new RuntimeException(
+                    'Simulated failure for '.$tenantContext->get()->name,
+                );
+            });
+
+        Exceptions::fake();
+
+        $response = $this->getJson('http://potato.localhost/test-failure');
+
+        $response->assertServerError();
+
+        Exceptions::assertReported(
+            fn (RuntimeException $exception): bool => $exception->getMessage() === 'Simulated failure for Potato',
+        );
+
+        $this->expectException(LogicException::class);
+
+        $context->get();
     }
 }
